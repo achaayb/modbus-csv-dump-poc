@@ -10,13 +10,34 @@ logging.basicConfig()
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
+# Constants
+UPDATE_INTERVAL = 0.2
+START_ADDRESS = 0
+HOST = "0.0.0.0"
+PORT = 5020
+
+
 # Function to continuously update data in the server
-def update_server_data(context):
+def update_server_data(context: ModbusServerContext):
+    global START_ADDRESS
+    global UPDATE_INTERVAL
     while True:
-        # Simulate changing data for holding registers
-        context[0x01].setValues(3, 0, [100, 200])  # Update holding registers with mock data
+        """
+        Updates the holding registers (function code 3) of the specified Modbus slave.
+
+        The `setValues` method allows you to write data to the Modbus slave device.
+        In this case, it writes values to the holding registers,
+        which are typically used to store configuration or process data.
+
+        Parameters:
+            slave_id (int): The Modbus slave address (e.g., 0x01 for slave 1).
+            function_code (int): The Modbus function code (e.g., 3 for reading/writing holding registers).
+            start_address (int): The starting address of the register to write to.
+            values (list): A list of values to write to the registers.
+        """
+        context[0x01].setValues(3, START_ADDRESS, [100, 200])
         log.debug(f"Updated holding registers with mock data: [100, 200]")
-        time.sleep(0.2)
+        time.sleep(UPDATE_INTERVAL)
 
 def run_tcp_server():
     # Create a simple Modbus datastore
@@ -24,10 +45,15 @@ def run_tcp_server():
     context = ModbusServerContext(slaves=store, single=True)
 
     # Start a separate thread to continuously update data
-    Thread(target=update_server_data, args=(context,)).start()
+    update_thread = Thread(target=update_server_data, args=(context,))
+    update_thread.daemon = True
+    update_thread.start()
 
-    # Start the TCP server
-    StartTcpServer(context, address=("0.0.0.0", 5020))
+    # Gracefully handle shutdown
+    try:
+        StartTcpServer(context, address=(HOST,PORT))
+    except KeyboardInterrupt:
+        log.info("Shutting down server...")
 
 if __name__ == "__main__":
     run_tcp_server()
